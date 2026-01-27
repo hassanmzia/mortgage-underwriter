@@ -162,15 +162,67 @@ class LoanApplicationDetailSerializer(serializers.ModelSerializer):
 
 
 class LoanApplicationCreateSerializer(serializers.ModelSerializer):
-    """Serializer for creating loan application"""
+    """Serializer for creating loan application with optional borrower and property data"""
+    borrower_data = serializers.DictField(required=False, write_only=True)
+    property_data = serializers.DictField(required=False, write_only=True)
 
     class Meta:
         model = LoanApplication
         fields = [
             'loan_type', 'loan_purpose', 'loan_amount', 'down_payment',
             'interest_rate', 'loan_term_months', 'estimated_monthly_payment',
-            'occupancy_type', 'source', 'notes'
+            'occupancy_type', 'source', 'notes',
+            'borrower_data', 'property_data'
         ]
+
+    def create(self, validated_data):
+        from decimal import Decimal
+        borrower_data = validated_data.pop('borrower_data', None)
+        property_data = validated_data.pop('property_data', None)
+
+        application = LoanApplication.objects.create(**validated_data)
+
+        # Create borrower if data provided
+        if borrower_data:
+            ssn = borrower_data.pop('ssn', '')
+            Borrower.objects.create(
+                application=application,
+                borrower_type='primary',
+                first_name=borrower_data.get('first_name', ''),
+                last_name=borrower_data.get('last_name', ''),
+                email=borrower_data.get('email', ''),
+                phone=borrower_data.get('phone', ''),
+                date_of_birth=borrower_data.get('date_of_birth'),
+                ssn_last_four=ssn[-4:] if ssn else '',
+                ssn_encrypted=ssn,
+                street_address=borrower_data.get('street_address', ''),
+                city=borrower_data.get('city', ''),
+                state=borrower_data.get('state', ''),
+                zip_code=borrower_data.get('zip_code', ''),
+                years_at_address=Decimal('0'),
+            )
+
+        # Create property if data provided
+        if property_data:
+            estimated_value = property_data.get('estimated_value')
+            purchase_price = estimated_value or validated_data.get('loan_amount', 0) + validated_data.get('down_payment', 0)
+            Property.objects.create(
+                application=application,
+                street_address=property_data.get('address', ''),
+                city=property_data.get('city', ''),
+                state=property_data.get('state', ''),
+                zip_code=property_data.get('zip_code', ''),
+                county='',
+                property_type=property_data.get('property_type', 'single_family'),
+                year_built=0,
+                square_feet=0,
+                bedrooms=0,
+                bathrooms=Decimal('0'),
+                purchase_price=Decimal(str(purchase_price)) if purchase_price else Decimal('0'),
+                appraised_value=Decimal(str(estimated_value)) if estimated_value else None,
+            )
+
+        return application
 
 
 class DTICalculationSerializer(serializers.Serializer):

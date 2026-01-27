@@ -67,17 +67,24 @@ class LoanApplicationViewSet(viewsets.ModelViewSet):
 
         return queryset
 
-    def perform_create(self, serializer):
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
         application = serializer.save()
+
         # Log activity
         from applications.users.models import UserActivity
         UserActivity.objects.create(
-            user=self.request.user,
+            user=request.user,
             action=UserActivity.ActionType.EDIT_APPLICATION,
             resource_type='LoanApplication',
             resource_id=application.id,
             details={'action': 'created'}
         )
+
+        # Return detailed response with id
+        response_serializer = LoanApplicationDetailSerializer(application)
+        return Response(response_serializer.data, status=status.HTTP_201_CREATED)
 
     @action(detail=False, methods=['get'])
     def summary(self, request):

@@ -5,6 +5,7 @@ import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Applications from './pages/Applications';
 import ApplicationDetail from './pages/ApplicationDetail';
+import NewApplication from './pages/NewApplication';
 import UnderwritingWorkflow from './pages/UnderwritingWorkflow';
 import Compliance from './pages/Compliance';
 import AgentMonitor from './pages/AgentMonitor';
@@ -34,6 +35,7 @@ export default function App() {
       >
         <Route index element={<Dashboard />} />
         <Route path="applications" element={<Applications />} />
+        <Route path="applications/new" element={<NewApplication />} />
         <Route path="applications/:id" element={<ApplicationDetail />} />
         <Route path="underwriting/:workflowId" element={<UnderwritingWorkflow />} />
         <Route path="compliance" element={<Compliance />} />
