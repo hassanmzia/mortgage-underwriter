@@ -223,6 +223,7 @@ export interface User {
   full_name: string;
   role: UserRole;
   department: string;
+  phone?: string;
   is_available: boolean;
 }
 
