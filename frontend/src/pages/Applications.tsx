@@ -1,12 +1,14 @@
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router-dom';
+import { toast } from 'react-hot-toast';
 import { applicationsAPI } from '../services/api';
 import { formatDistanceToNow } from 'date-fns';
 import {
   MagnifyingGlassIcon,
   FunnelIcon,
   PlusIcon,
+  TrashIcon,
 } from '@heroicons/react/24/outline';
 import clsx from 'clsx';
 import type { LoanApplication } from '../types';
@@ -27,8 +29,10 @@ const statusColors: Record<string, string> = {
 
 export default function Applications() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [deleteId, setDeleteId] = useState<string | null>(null);
 
   const { data, isLoading } = useQuery({
     queryKey: ['applications', search, statusFilter],
@@ -36,6 +40,19 @@ export default function Applications() {
       search: search || undefined,
       status: statusFilter || undefined,
     }),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => applicationsAPI.delete(id),
+    onSuccess: () => {
+      toast.success('Application deleted');
+      setDeleteId(null);
+      queryClient.invalidateQueries({ queryKey: ['applications'] });
+    },
+    onError: (error: any) => {
+      const message = error.response?.data?.error || 'Failed to delete application';
+      toast.error(message);
+    },
   });
 
   const applications: LoanApplication[] = data?.results || [];
@@ -198,12 +215,23 @@ export default function Applications() {
                       : 'Not submitted'}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-right text-sm">
-                    <Link
-                      to={`/applications/${app.id}`}
-                      className="text-primary-600 hover:text-primary-700 font-medium"
-                    >
-                      View Details
-                    </Link>
+                    <div className="flex items-center justify-end gap-3">
+                      <Link
+                        to={`/applications/${app.id}`}
+                        className="text-primary-600 hover:text-primary-700 font-medium"
+                      >
+                        View Details
+                      </Link>
+                      {app.status === 'draft' && (
+                        <button
+                          onClick={() => setDeleteId(app.id)}
+                          className="text-red-500 hover:text-red-700 transition-colors"
+                          title="Delete application"
+                        >
+                          <TrashIcon className="h-4 w-4" />
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -211,6 +239,33 @@ export default function Applications() {
           </table>
         )}
       </div>
+
+      {/* Delete Confirmation Modal */}
+      {deleteId && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 max-w-md w-full mx-4 shadow-xl">
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">Delete Application</h3>
+            <p className="text-gray-600 mb-6">
+              Are you sure you want to delete this application? This action cannot be undone.
+            </p>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setDeleteId(null)}
+                className="px-4 py-2 rounded-lg font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => deleteMutation.mutate(deleteId)}
+                disabled={deleteMutation.isPending}
+                className="px-4 py-2 rounded-lg font-medium text-white bg-red-600 hover:bg-red-700 transition-colors"
+              >
+                {deleteMutation.isPending ? 'Deleting...' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
