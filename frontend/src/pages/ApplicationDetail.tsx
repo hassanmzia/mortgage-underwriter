@@ -3,13 +3,22 @@ import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-hot-toast';
 import { applicationsAPI } from '../services/api';
+import { useAuthStore } from '../store/authStore';
 import clsx from 'clsx';
+
+const reviewRoles = ['admin', 'senior_underwriter', 'reviewer'];
+const activeStatuses = ['submitted', 'in_review', 'processing', 'underwriting'];
 
 export default function ApplicationDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const user = useAuthStore((s) => s.user);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [reviewDecision, setReviewDecision] = useState('');
+  const [reviewComments, setReviewComments] = useState('');
+
+  const canReview = user && reviewRoles.includes(user.role);
 
   const { data: application, isLoading } = useQuery({
     queryKey: ['application', id],
@@ -38,6 +47,22 @@ export default function ApplicationDetail() {
     },
     onError: (error: any) => {
       const message = error.response?.data?.error || 'Failed to delete application';
+      toast.error(message);
+    },
+  });
+
+  const reviewMutation = useMutation({
+    mutationFn: (data: { decision: string; comments: string }) =>
+      applicationsAPI.humanReview(id!, data.decision, data.comments),
+    onSuccess: (data) => {
+      toast.success(`Application ${data.status || 'reviewed'}`);
+      queryClient.invalidateQueries({ queryKey: ['application', id] });
+      queryClient.invalidateQueries({ queryKey: ['applications'] });
+      setReviewDecision('');
+      setReviewComments('');
+    },
+    onError: (error: any) => {
+      const message = error.response?.data?.error || 'Failed to submit review';
       toast.error(message);
     },
   });
@@ -102,12 +127,17 @@ export default function ApplicationDetail() {
               </button>
             </>
           )}
-          {application.requires_human_review && !application.human_review_completed && (
+          {canReview && activeStatuses.includes(application.status) && (
+            <a href="#review-section" className="btn-primary">
+              Review & Decide
+            </a>
+          )}
+          {application.underwriting_workflow && (
             <Link
-              to={`/underwriting/${application.underwriting_workflow?.id}`}
-              className="btn-primary"
+              to={`/underwriting/${application.underwriting_workflow.id}`}
+              className="btn-secondary"
             >
-              Review Decision
+              View Workflow
             </Link>
           )}
         </div>
@@ -256,7 +286,7 @@ export default function ApplicationDetail() {
             <div>
               <h2 className="text-lg font-semibold text-gray-900">Underwriting Workflow</h2>
               <p className="text-gray-600 mt-1">
-                Status: {application.underwriting_workflow.status}
+                Status: <span className="capitalize">{application.underwriting_workflow.status?.replace('_', ' ')}</span>
               </p>
             </div>
             <Link
@@ -266,6 +296,97 @@ export default function ApplicationDetail() {
               View Workflow Details
             </Link>
           </div>
+        </div>
+      )}
+
+      {/* Review & Decision Section for Senior Underwriters */}
+      {canReview && activeStatuses.includes(application.status) && !application.human_review_completed && (
+        <div id="review-section" className="card border-2 border-primary-300">
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">
+            Review & Decision
+          </h2>
+          <p className="text-gray-600 mb-4">
+            As a {user?.role?.replace('_', ' ')}, you can make a decision on this application.
+          </p>
+
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Decision</label>
+              <div className="flex gap-3">
+                {[
+                  { value: 'approve', label: 'Approve', color: 'green' },
+                  { value: 'condition', label: 'Conditional', color: 'yellow' },
+                  { value: 'deny', label: 'Deny', color: 'red' },
+                ].map((opt) => (
+                  <button
+                    key={opt.value}
+                    onClick={() => setReviewDecision(opt.value)}
+                    className={clsx(
+                      'px-5 py-2.5 rounded-lg border-2 font-medium transition-all',
+                      reviewDecision === opt.value
+                        ? opt.color === 'green' ? 'border-green-500 bg-green-50 text-green-700' :
+                          opt.color === 'red' ? 'border-red-500 bg-red-50 text-red-700' :
+                          'border-yellow-500 bg-yellow-50 text-yellow-700'
+                        : 'border-gray-300 text-gray-600 hover:border-gray-400'
+                    )}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Comments / Reasoning
+              </label>
+              <textarea
+                value={reviewComments}
+                onChange={(e) => setReviewComments(e.target.value)}
+                className="input h-28"
+                placeholder="Enter your review notes and reasoning for this decision..."
+              />
+            </div>
+
+            <button
+              onClick={() => {
+                if (!reviewDecision) {
+                  toast.error('Please select a decision');
+                  return;
+                }
+                reviewMutation.mutate({ decision: reviewDecision, comments: reviewComments });
+              }}
+              disabled={reviewMutation.isPending || !reviewDecision}
+              className={clsx(
+                'w-full px-4 py-2.5 rounded-lg font-medium text-white transition-colors',
+                reviewDecision === 'approve' ? 'bg-green-600 hover:bg-green-700' :
+                reviewDecision === 'deny' ? 'bg-red-600 hover:bg-red-700' :
+                reviewDecision === 'condition' ? 'bg-yellow-600 hover:bg-yellow-700' :
+                'bg-primary-600 hover:bg-primary-700'
+              )}
+            >
+              {reviewMutation.isPending ? 'Submitting...' : 'Submit Decision'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Decision Completed */}
+      {application.human_review_completed && application.decision_at && (
+        <div className={clsx(
+          'card border-l-4',
+          application.status === 'approved' ? 'border-green-500 bg-green-50' :
+          application.status === 'denied' ? 'border-red-500 bg-red-50' :
+          application.status === 'conditional' ? 'border-yellow-500 bg-yellow-50' :
+          'border-gray-500 bg-gray-50'
+        )}>
+          <h2 className="text-lg font-semibold text-gray-900 mb-2">Final Decision</h2>
+          <p className="text-xl font-bold capitalize">
+            {application.status.replace('_', ' ')}
+          </p>
+          <p className="text-sm text-gray-600 mt-1">
+            Decided on {new Date(application.decision_at).toLocaleDateString()}
+          </p>
         </div>
       )}
 
