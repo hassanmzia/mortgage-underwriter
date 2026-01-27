@@ -88,7 +88,7 @@ class AgentAnalysis(models.Model):
     structured_data = models.JSONField(default=dict)
 
     # Recommendations
-    recommendation = models.CharField(max_length=50, blank=True)
+    recommendation = models.CharField(max_length=255, blank=True)
     risk_factors = models.JSONField(default=list)
     conditions = models.JSONField(default=list)
 
