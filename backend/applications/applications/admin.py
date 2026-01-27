@@ -8,43 +8,12 @@ from .models import (
 )
 
 
-class BorrowerInline(admin.StackedInline):
-    model = Borrower
-    extra = 0
-
-
-class CreditProfileInline(admin.StackedInline):
-    model = CreditProfile
-    extra = 0
-
-
-class EmploymentInline(admin.TabularInline):
-    model = Employment
-    extra = 0
-
-
-class AssetInline(admin.TabularInline):
-    model = Asset
-    extra = 0
-
-
-class LiabilityInline(admin.TabularInline):
-    model = Liability
-    extra = 0
-
-
-class DocumentInline(admin.TabularInline):
-    model = Document
-    extra = 0
-
-
 @admin.register(LoanApplication)
 class LoanApplicationAdmin(admin.ModelAdmin):
-    list_display = ['application_number', 'loan_type', 'loan_amount', 'status', 'created_by', 'created_at']
+    list_display = ['case_id', 'loan_type', 'loan_amount', 'status', 'created_at']
     list_filter = ['status', 'loan_type', 'loan_purpose', 'created_at']
-    search_fields = ['application_number', 'created_by__username']
-    readonly_fields = ['application_number', 'created_at', 'updated_at']
-    inlines = [BorrowerInline, DocumentInline]
+    search_fields = ['case_id']
+    readonly_fields = ['case_id', 'created_at', 'updated_at']
     ordering = ['-created_at']
 
 
@@ -52,19 +21,47 @@ class LoanApplicationAdmin(admin.ModelAdmin):
 class BorrowerAdmin(admin.ModelAdmin):
     list_display = ['first_name', 'last_name', 'email', 'borrower_type', 'application']
     list_filter = ['borrower_type', 'citizenship_status']
-    search_fields = ['first_name', 'last_name', 'email', 'ssn_last_four']
-    inlines = [CreditProfileInline, EmploymentInline, AssetInline, LiabilityInline]
+    search_fields = ['first_name', 'last_name', 'email']
+
+
+@admin.register(CreditProfile)
+class CreditProfileAdmin(admin.ModelAdmin):
+    list_display = ['borrower', 'credit_score', 'credit_bureau']
+    list_filter = ['credit_bureau']
+
+
+@admin.register(Employment)
+class EmploymentAdmin(admin.ModelAdmin):
+    list_display = ['borrower', 'employer_name', 'is_current', 'monthly_income']
+    list_filter = ['is_current', 'employment_type']
+
+
+@admin.register(Asset)
+class AssetAdmin(admin.ModelAdmin):
+    list_display = ['borrower', 'asset_type', 'institution_name', 'current_value']
+    list_filter = ['asset_type']
+
+
+@admin.register(Liability)
+class LiabilityAdmin(admin.ModelAdmin):
+    list_display = ['borrower', 'liability_type', 'creditor_name', 'monthly_payment']
+    list_filter = ['liability_type']
 
 
 @admin.register(Property)
 class PropertyAdmin(admin.ModelAdmin):
-    list_display = ['address_line1', 'city', 'state', 'property_type', 'estimated_value', 'application']
-    list_filter = ['property_type', 'occupancy_type', 'state']
-    search_fields = ['address_line1', 'city', 'zip_code']
+    list_display = ['street_address', 'city', 'state', 'property_type', 'application']
+    list_filter = ['property_type', 'state']
+    search_fields = ['street_address', 'city', 'zip_code']
+
+
+@admin.register(LargeDeposit)
+class LargeDepositAdmin(admin.ModelAdmin):
+    list_display = ['borrower', 'amount', 'deposit_date', 'source_verified']
+    list_filter = ['source_verified']
 
 
 @admin.register(Document)
 class DocumentAdmin(admin.ModelAdmin):
-    list_display = ['name', 'document_type', 'application', 'uploaded_at', 'verified']
-    list_filter = ['document_type', 'verified', 'uploaded_at']
-    search_fields = ['name', 'application__application_number']
+    list_display = ['document_type', 'application', 'uploaded_at']
+    list_filter = ['document_type', 'uploaded_at']
