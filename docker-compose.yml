@@ -170,7 +170,7 @@ services:
         - REACT_APP_WS_URL=ws://localhost:3060/ws
     container_name: mortgage_frontend
     ports:
-      - "3001:80"
+      - "3002:80"
     depends_on:
       - backend
       - mcp-agents
