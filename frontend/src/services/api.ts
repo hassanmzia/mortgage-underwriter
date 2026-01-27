@@ -151,6 +151,11 @@ export const applicationsAPI = {
     return response.data;
   },
 
+  delete: async (id: string) => {
+    const response = await api.delete(`/applications/${id}/`);
+    return response.data;
+  },
+
   submit: async (id: string) => {
     const response = await api.post(`/applications/${id}/submit/`);
     return response.data;

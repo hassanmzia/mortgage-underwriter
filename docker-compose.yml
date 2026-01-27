@@ -164,6 +164,7 @@ services:
       - DJANGO_API_URL=http://backend:8000
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - OPENAI_API_BASE=${OPENAI_API_BASE:-https://api.openai.com/v1}
+      - OPENAI_MODEL=${OPENAI_MODEL:-gpt-4o-mini}
     ports:
       - "3010:3000"
     depends_on:

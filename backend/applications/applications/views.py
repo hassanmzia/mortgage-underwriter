@@ -86,6 +86,26 @@ class LoanApplicationViewSet(viewsets.ModelViewSet):
         response_serializer = LoanApplicationDetailSerializer(application)
         return Response(response_serializer.data, status=status.HTTP_201_CREATED)
 
+    def destroy(self, request, *args, **kwargs):
+        application = self.get_object()
+        if application.status not in ('draft', 'withdrawn'):
+            return Response(
+                {'error': 'Only draft or withdrawn applications can be deleted'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Log activity
+        from applications.users.models import UserActivity
+        UserActivity.objects.create(
+            user=request.user,
+            action=UserActivity.ActionType.EDIT_APPLICATION,
+            resource_type='LoanApplication',
+            resource_id=application.id,
+            details={'action': 'deleted', 'case_id': application.case_id}
+        )
+
+        return super().destroy(request, *args, **kwargs)
+
     @action(detail=False, methods=['get'])
     def summary(self, request):
         """Get dashboard summary statistics"""

@@ -1,4 +1,5 @@
-import { useParams, Link } from 'react-router-dom';
+import { useState } from 'react';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-hot-toast';
 import { applicationsAPI } from '../services/api';
@@ -6,7 +7,9 @@ import clsx from 'clsx';
 
 export default function ApplicationDetail() {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const { data: application, isLoading } = useQuery({
     queryKey: ['application', id],
@@ -22,6 +25,19 @@ export default function ApplicationDetail() {
     },
     onError: (error: any) => {
       const message = error.response?.data?.error || 'Failed to submit application';
+      toast.error(message);
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: () => applicationsAPI.delete(id!),
+    onSuccess: () => {
+      toast.success('Application deleted');
+      queryClient.invalidateQueries({ queryKey: ['applications'] });
+      navigate('/applications');
+    },
+    onError: (error: any) => {
+      const message = error.response?.data?.error || 'Failed to delete application';
       toast.error(message);
     },
   });
@@ -70,13 +86,21 @@ export default function ApplicationDetail() {
         </div>
         <div className="flex gap-3">
           {application.status === 'draft' && (
-            <button
-              onClick={() => submitMutation.mutate()}
-              disabled={submitMutation.isPending}
-              className="btn-primary"
-            >
-              {submitMutation.isPending ? 'Submitting...' : 'Submit for Underwriting'}
-            </button>
+            <>
+              <button
+                onClick={() => submitMutation.mutate()}
+                disabled={submitMutation.isPending}
+                className="btn-primary"
+              >
+                {submitMutation.isPending ? 'Submitting...' : 'Submit for Underwriting'}
+              </button>
+              <button
+                onClick={() => setShowDeleteConfirm(true)}
+                className="px-4 py-2 rounded-lg font-medium text-red-600 bg-red-50 hover:bg-red-100 transition-colors"
+              >
+                Delete
+              </button>
+            </>
           )}
           {application.requires_human_review && !application.human_review_completed && (
             <Link
@@ -241,6 +265,33 @@ export default function ApplicationDetail() {
             >
               View Workflow Details
             </Link>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 max-w-md w-full mx-4 shadow-xl">
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">Delete Application</h3>
+            <p className="text-gray-600 mb-6">
+              Are you sure you want to delete application <strong>{application.case_id}</strong>? This action cannot be undone.
+            </p>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setShowDeleteConfirm(false)}
+                className="px-4 py-2 rounded-lg font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => deleteMutation.mutate()}
+                disabled={deleteMutation.isPending}
+                className="px-4 py-2 rounded-lg font-medium text-white bg-red-600 hover:bg-red-700 transition-colors"
+              >
+                {deleteMutation.isPending ? 'Deleting...' : 'Delete'}
+              </button>
+            </div>
           </div>
         </div>
       )}
