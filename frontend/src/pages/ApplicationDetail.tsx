@@ -1,15 +1,29 @@
 import { useParams, Link } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'react-hot-toast';
 import { applicationsAPI } from '../services/api';
 import clsx from 'clsx';
 
 export default function ApplicationDetail() {
   const { id } = useParams<{ id: string }>();
+  const queryClient = useQueryClient();
 
   const { data: application, isLoading } = useQuery({
     queryKey: ['application', id],
     queryFn: () => applicationsAPI.get(id!),
     enabled: !!id,
+  });
+
+  const submitMutation = useMutation({
+    mutationFn: () => applicationsAPI.submit(id!),
+    onSuccess: () => {
+      toast.success('Application submitted for underwriting!');
+      queryClient.invalidateQueries({ queryKey: ['application', id] });
+    },
+    onError: (error: any) => {
+      const message = error.response?.data?.error || 'Failed to submit application';
+      toast.error(message);
+    },
   });
 
   if (isLoading) {
@@ -55,6 +69,15 @@ export default function ApplicationDetail() {
           </p>
         </div>
         <div className="flex gap-3">
+          {application.status === 'draft' && (
+            <button
+              onClick={() => submitMutation.mutate()}
+              disabled={submitMutation.isPending}
+              className="btn-primary"
+            >
+              {submitMutation.isPending ? 'Submitting...' : 'Submit for Underwriting'}
+            </button>
+          )}
           {application.requires_human_review && !application.human_review_completed && (
             <Link
               to={`/underwriting/${application.underwriting_workflow?.id}`}

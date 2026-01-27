@@ -80,6 +80,7 @@ export default function Applications() {
               className="input w-40"
             >
               <option value="">All Status</option>
+              <option value="draft">Draft</option>
               <option value="submitted">Submitted</option>
               <option value="underwriting">Underwriting</option>
               <option value="approved">Approved</option>
