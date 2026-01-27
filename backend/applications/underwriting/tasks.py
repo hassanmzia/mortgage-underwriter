@@ -98,6 +98,14 @@ def start_underwriting_workflow(self, application_id: str):
         if 'workflow' in locals():
             workflow.error_message = f"MCP service error: {e}"
             workflow.save()
+        # On final retry, revert application status
+        if self.request.retries >= self.max_retries - 1:
+            try:
+                app = LoanApplication.objects.get(id=application_id)
+                app.status = LoanApplication.Status.SUBMITTED
+                app.save()
+            except Exception:
+                pass
         self.retry(countdown=60 * (self.request.retries + 1))
 
     except Exception as e:
@@ -106,6 +114,13 @@ def start_underwriting_workflow(self, application_id: str):
             workflow.status = UnderwritingWorkflow.WorkflowStatus.FAILED
             workflow.error_message = str(e)
             workflow.save()
+        # Revert application status so it can be resubmitted
+        try:
+            app = LoanApplication.objects.get(id=application_id)
+            app.status = LoanApplication.Status.SUBMITTED
+            app.save()
+        except Exception:
+            pass
         raise
 
 
@@ -358,33 +373,36 @@ def prepare_application_data(application) -> dict:
         for emp in borrower.employments.filter(is_current=True):
             borrower_data['employment'].append({
                 'type': emp.employment_type,
-                'years': float(emp.years_employed),
-                'monthly_income': float(emp.monthly_income),
-                'annual_income': float(emp.annual_income)
+                'years': float(emp.years_employed or 0),
+                'monthly_income': float(emp.monthly_income or 0),
+                'annual_income': float(emp.annual_income or 0)
             })
 
         # Assets
         borrower_data['assets'] = {}
         for asset in borrower.assets.all():
-            borrower_data['assets'][asset.asset_type] = float(asset.current_balance)
+            borrower_data['assets'][asset.asset_type] = float(asset.current_balance or 0)
 
         # Liabilities
         borrower_data['debts'] = {}
         total_monthly_debt = 0
         for liability in borrower.liabilities.filter(included_in_dti=True):
-            borrower_data['debts'][liability.liability_type] = float(liability.monthly_payment)
-            total_monthly_debt += float(liability.monthly_payment)
+            payment = float(liability.monthly_payment or 0)
+            borrower_data['debts'][liability.liability_type] = payment
+            total_monthly_debt += payment
         borrower_data['total_monthly_debt'] = total_monthly_debt
 
         # Large deposits
-        borrower_data['large_deposits'] = [
-            {
-                'amount': float(dep.amount),
-                'date': dep.deposit_date.isoformat(),
-                'verified': dep.verified
-            }
-            for dep in borrower.large_deposits.all()
-        ]
+        borrower_data['large_deposits'] = []
+        for dep in borrower.large_deposits.all():
+            try:
+                borrower_data['large_deposits'].append({
+                    'amount': float(dep.amount or 0),
+                    'date': dep.deposit_date.isoformat() if dep.deposit_date else '',
+                    'verified': dep.verified
+                })
+            except Exception:
+                pass
 
         data['borrowers'].append(borrower_data)
 

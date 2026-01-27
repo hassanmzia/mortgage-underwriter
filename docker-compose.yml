@@ -103,7 +103,7 @@ services:
       dockerfile: Dockerfile
     container_name: mortgage_celery
     entrypoint: []
-    command: ["celery", "-A", "config", "worker", "-l", "info", "-c", "4"]
+    command: ["celery", "-A", "config", "worker", "-l", "info", "-c", "4", "-Q", "celery,underwriting,agents,compliance"]
     environment:
       - DEBUG=False
       - SECRET_KEY=${DJANGO_SECRET_KEY:-your-super-secret-key-change-in-production}
@@ -120,6 +120,8 @@ services:
       backend:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      mcp-agents:
         condition: service_healthy
     networks:
       - mortgage_network
