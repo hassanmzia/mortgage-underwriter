@@ -185,12 +185,17 @@ def save_agent_analysis(workflow_id: str, analysis_data: dict):
         raw_type = analysis_data.get('agent_type', '')
         agent_type = AGENT_TYPE_MAP.get(raw_type, raw_type)
 
+        # Truncate recommendation to fit model field (max 255 chars)
+        recommendation = analysis_data.get('recommendation', '') or ''
+        if len(recommendation) > 255:
+            recommendation = recommendation[:252] + '...'
+
         analysis = AgentAnalysis.objects.create(
             workflow=workflow,
             agent_type=agent_type,
             analysis_text=analysis_data.get('analysis_text', ''),
             structured_data=analysis_data.get('structured_data', {}),
-            recommendation=analysis_data.get('recommendation', ''),
+            recommendation=recommendation,
             risk_factors=analysis_data.get('risk_factors', []),
             conditions=analysis_data.get('conditions', []),
             confidence_score=analysis_data.get('confidence_score'),
