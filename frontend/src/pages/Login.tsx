@@ -10,13 +10,25 @@ interface LoginForm {
   password: string;
 }
 
+interface RegisterForm {
+  username: string;
+  email: string;
+  password: string;
+  confirmPassword: string;
+  first_name: string;
+  last_name: string;
+}
+
 export default function Login() {
   const [isLoading, setIsLoading] = useState(false);
+  const [isRegister, setIsRegister] = useState(false);
   const navigate = useNavigate();
   const { login } = useAuthStore();
-  const { register, handleSubmit, formState: { errors } } = useForm<LoginForm>();
 
-  const onSubmit = async (data: LoginForm) => {
+  const loginForm = useForm<LoginForm>();
+  const registerForm = useForm<RegisterForm>();
+
+  const onLogin = async (data: LoginForm) => {
     setIsLoading(true);
     try {
       const tokenResponse = await authAPI.login(data.username, data.password);
@@ -32,6 +44,36 @@ export default function Login() {
       navigate('/');
     } catch (error: any) {
       toast.error(error.response?.data?.detail || 'Invalid credentials');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const onRegister = async (data: RegisterForm) => {
+    if (data.password !== data.confirmPassword) {
+      toast.error('Passwords do not match');
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      await authAPI.register({
+        username: data.username,
+        email: data.email,
+        password: data.password,
+        first_name: data.first_name,
+        last_name: data.last_name,
+      });
+
+      toast.success('Registration successful! Please sign in.');
+      setIsRegister(false);
+      registerForm.reset();
+    } catch (error: any) {
+      const errorMsg = error.response?.data?.username?.[0] ||
+                       error.response?.data?.email?.[0] ||
+                       error.response?.data?.detail ||
+                       'Registration failed';
+      toast.error(errorMsg);
     } finally {
       setIsLoading(false);
     }
@@ -78,7 +120,7 @@ export default function Login() {
         </div>
       </div>
 
-      {/* Right side - Login form */}
+      {/* Right side - Login/Register form */}
       <div className="flex-1 flex items-center justify-center p-8">
         <div className="w-full max-w-md">
           <div className="lg:hidden mb-8">
@@ -90,64 +132,189 @@ export default function Login() {
             </div>
           </div>
 
-          <div className="mb-8">
-            <h2 className="text-2xl font-bold text-gray-900">Welcome back</h2>
-            <p className="text-gray-600 mt-2">Sign in to your account to continue</p>
-          </div>
+          {!isRegister ? (
+            <>
+              <div className="mb-8">
+                <h2 className="text-2xl font-bold text-gray-900">Welcome back</h2>
+                <p className="text-gray-600 mt-2">Sign in to your account to continue</p>
+              </div>
 
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-            <div>
-              <label htmlFor="username" className="label">
-                Username
-              </label>
-              <input
-                {...register('username', { required: 'Username is required' })}
-                type="text"
-                className="input"
-                placeholder="Enter your username"
-              />
-              {errors.username && (
-                <p className="mt-1 text-sm text-red-600">{errors.username.message}</p>
-              )}
-            </div>
+              <form onSubmit={loginForm.handleSubmit(onLogin)} className="space-y-6">
+                <div>
+                  <label htmlFor="username" className="label">
+                    Username
+                  </label>
+                  <input
+                    {...loginForm.register('username', { required: 'Username is required' })}
+                    type="text"
+                    className="input"
+                    placeholder="Enter your username"
+                  />
+                  {loginForm.formState.errors.username && (
+                    <p className="mt-1 text-sm text-red-600">{loginForm.formState.errors.username.message}</p>
+                  )}
+                </div>
 
-            <div>
-              <label htmlFor="password" className="label">
-                Password
-              </label>
-              <input
-                {...register('password', { required: 'Password is required' })}
-                type="password"
-                className="input"
-                placeholder="Enter your password"
-              />
-              {errors.password && (
-                <p className="mt-1 text-sm text-red-600">{errors.password.message}</p>
-              )}
-            </div>
+                <div>
+                  <label htmlFor="password" className="label">
+                    Password
+                  </label>
+                  <input
+                    {...loginForm.register('password', { required: 'Password is required' })}
+                    type="password"
+                    className="input"
+                    placeholder="Enter your password"
+                  />
+                  {loginForm.formState.errors.password && (
+                    <p className="mt-1 text-sm text-red-600">{loginForm.formState.errors.password.message}</p>
+                  )}
+                </div>
 
-            <div className="flex items-center justify-between">
-              <label className="flex items-center gap-2">
-                <input type="checkbox" className="rounded text-primary-600" />
-                <span className="text-sm text-gray-600">Remember me</span>
-              </label>
-              <a href="#" className="text-sm text-primary-600 hover:text-primary-700">
-                Forgot password?
-              </a>
-            </div>
+                <div className="flex items-center justify-between">
+                  <label className="flex items-center gap-2">
+                    <input type="checkbox" className="rounded text-primary-600" />
+                    <span className="text-sm text-gray-600">Remember me</span>
+                  </label>
+                  <a href="#" className="text-sm text-primary-600 hover:text-primary-700">
+                    Forgot password?
+                  </a>
+                </div>
 
-            <button
-              type="submit"
-              disabled={isLoading}
-              className="w-full btn-primary py-3 disabled:opacity-50"
-            >
-              {isLoading ? 'Signing in...' : 'Sign in'}
-            </button>
-          </form>
+                <button
+                  type="submit"
+                  disabled={isLoading}
+                  className="w-full btn-primary py-3 disabled:opacity-50"
+                >
+                  {isLoading ? 'Signing in...' : 'Sign in'}
+                </button>
+              </form>
 
-          <p className="mt-8 text-center text-sm text-gray-500">
-            Demo credentials: admin / admin123
-          </p>
+              <p className="mt-8 text-center text-sm text-gray-600">
+                Don't have an account?{' '}
+                <button
+                  onClick={() => setIsRegister(true)}
+                  className="text-primary-600 hover:text-primary-700 font-medium"
+                >
+                  Create account
+                </button>
+              </p>
+            </>
+          ) : (
+            <>
+              <div className="mb-8">
+                <h2 className="text-2xl font-bold text-gray-900">Create account</h2>
+                <p className="text-gray-600 mt-2">Register to get started with MortgageAI</p>
+              </div>
+
+              <form onSubmit={registerForm.handleSubmit(onRegister)} className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="label">First Name</label>
+                    <input
+                      {...registerForm.register('first_name', { required: 'First name is required' })}
+                      type="text"
+                      className="input"
+                      placeholder="John"
+                    />
+                    {registerForm.formState.errors.first_name && (
+                      <p className="mt-1 text-sm text-red-600">{registerForm.formState.errors.first_name.message}</p>
+                    )}
+                  </div>
+                  <div>
+                    <label className="label">Last Name</label>
+                    <input
+                      {...registerForm.register('last_name', { required: 'Last name is required' })}
+                      type="text"
+                      className="input"
+                      placeholder="Doe"
+                    />
+                    {registerForm.formState.errors.last_name && (
+                      <p className="mt-1 text-sm text-red-600">{registerForm.formState.errors.last_name.message}</p>
+                    )}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="label">Username</label>
+                  <input
+                    {...registerForm.register('username', {
+                      required: 'Username is required',
+                      minLength: { value: 3, message: 'Username must be at least 3 characters' }
+                    })}
+                    type="text"
+                    className="input"
+                    placeholder="johndoe"
+                  />
+                  {registerForm.formState.errors.username && (
+                    <p className="mt-1 text-sm text-red-600">{registerForm.formState.errors.username.message}</p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="label">Email</label>
+                  <input
+                    {...registerForm.register('email', {
+                      required: 'Email is required',
+                      pattern: { value: /^\S+@\S+$/i, message: 'Invalid email address' }
+                    })}
+                    type="email"
+                    className="input"
+                    placeholder="john@example.com"
+                  />
+                  {registerForm.formState.errors.email && (
+                    <p className="mt-1 text-sm text-red-600">{registerForm.formState.errors.email.message}</p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="label">Password</label>
+                  <input
+                    {...registerForm.register('password', {
+                      required: 'Password is required',
+                      minLength: { value: 8, message: 'Password must be at least 8 characters' }
+                    })}
+                    type="password"
+                    className="input"
+                    placeholder="Create a password"
+                  />
+                  {registerForm.formState.errors.password && (
+                    <p className="mt-1 text-sm text-red-600">{registerForm.formState.errors.password.message}</p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="label">Confirm Password</label>
+                  <input
+                    {...registerForm.register('confirmPassword', { required: 'Please confirm your password' })}
+                    type="password"
+                    className="input"
+                    placeholder="Confirm your password"
+                  />
+                  {registerForm.formState.errors.confirmPassword && (
+                    <p className="mt-1 text-sm text-red-600">{registerForm.formState.errors.confirmPassword.message}</p>
+                  )}
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={isLoading}
+                  className="w-full btn-primary py-3 disabled:opacity-50 mt-6"
+                >
+                  {isLoading ? 'Creating account...' : 'Create account'}
+                </button>
+              </form>
+
+              <p className="mt-8 text-center text-sm text-gray-600">
+                Already have an account?{' '}
+                <button
+                  onClick={() => setIsRegister(false)}
+                  className="text-primary-600 hover:text-primary-700 font-medium"
+                >
+                  Sign in
+                </button>
+              </p>
+            </>
+          )}
         </div>
       </div>
     </div>
