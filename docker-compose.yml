@@ -1,0 +1,206 @@
+version: '3.9'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: mortgage_postgres
+    environment:
+      POSTGRES_DB: mortgage_underwriter
+      POSTGRES_USER: mortgage_user
+      POSTGRES_PASSWORD: mortgage_secure_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/init.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mortgage_user -d mortgage_underwriter"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - mortgage_network
+
+  # Redis for Caching and Message Queue
+  redis:
+    image: redis:7-alpine
+    container_name: mortgage_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - mortgage_network
+
+  # ChromaDB Vector Database
+  chromadb:
+    image: chromadb/chroma:latest
+    container_name: mortgage_chromadb
+    environment:
+      - IS_PERSISTENT=TRUE
+      - PERSIST_DIRECTORY=/chroma/chroma
+      - ANONYMIZED_TELEMETRY=FALSE
+    volumes:
+      - chroma_data:/chroma/chroma
+    ports:
+      - "8000:8000"
+    networks:
+      - mortgage_network
+
+  # Django Backend API
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: mortgage_backend
+    environment:
+      - DEBUG=False
+      - SECRET_KEY=${DJANGO_SECRET_KEY:-your-super-secret-key-change-in-production}
+      - DATABASE_URL=postgres://mortgage_user:mortgage_secure_password@postgres:5432/mortgage_underwriter
+      - REDIS_URL=redis://redis:6379/0
+      - CHROMADB_HOST=chromadb
+      - CHROMADB_PORT=8000
+      - MCP_SERVICE_URL=http://mcp-agents:3000
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OPENAI_API_BASE=${OPENAI_API_BASE:-https://api.openai.com/v1}
+    volumes:
+      - ./backend:/app
+      - static_volume:/app/staticfiles
+      - media_volume:/app/media
+    ports:
+      - "8001:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      chromadb:
+        condition: service_started
+    networks:
+      - mortgage_network
+    command: >
+      sh -c "python manage.py migrate &&
+             python manage.py collectstatic --noinput &&
+             gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 4"
+
+  # Celery Worker for Background Tasks
+  celery:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: mortgage_celery
+    environment:
+      - DEBUG=False
+      - SECRET_KEY=${DJANGO_SECRET_KEY:-your-super-secret-key-change-in-production}
+      - DATABASE_URL=postgres://mortgage_user:mortgage_secure_password@postgres:5432/mortgage_underwriter
+      - REDIS_URL=redis://redis:6379/0
+      - CHROMADB_HOST=chromadb
+      - CHROMADB_PORT=8000
+      - MCP_SERVICE_URL=http://mcp-agents:3000
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OPENAI_API_BASE=${OPENAI_API_BASE:-https://api.openai.com/v1}
+    volumes:
+      - ./backend:/app
+    depends_on:
+      - backend
+      - redis
+    networks:
+      - mortgage_network
+    command: celery -A config worker -l info -c 4
+
+  # Celery Beat Scheduler
+  celery-beat:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: mortgage_celery_beat
+    environment:
+      - DEBUG=False
+      - SECRET_KEY=${DJANGO_SECRET_KEY:-your-super-secret-key-change-in-production}
+      - DATABASE_URL=postgres://mortgage_user:mortgage_secure_password@postgres:5432/mortgage_underwriter
+      - REDIS_URL=redis://redis:6379/0
+    volumes:
+      - ./backend:/app
+    depends_on:
+      - backend
+      - redis
+    networks:
+      - mortgage_network
+    command: celery -A config beat -l info
+
+  # Node.js MCP Agent Service
+  mcp-agents:
+    build:
+      context: ./mcp-agents
+      dockerfile: Dockerfile
+    container_name: mortgage_mcp_agents
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - REDIS_URL=redis://redis:6379/1
+      - CHROMADB_HOST=chromadb
+      - CHROMADB_PORT=8000
+      - DJANGO_API_URL=http://backend:8000
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OPENAI_API_BASE=${OPENAI_API_BASE:-https://api.openai.com/v1}
+    volumes:
+      - ./mcp-agents:/app
+      - /app/node_modules
+    ports:
+      - "3000:3000"
+    depends_on:
+      - redis
+      - chromadb
+    networks:
+      - mortgage_network
+
+  # React Frontend
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        - REACT_APP_API_URL=http://localhost:3060/api
+        - REACT_APP_WS_URL=ws://localhost:3060/ws
+    container_name: mortgage_frontend
+    ports:
+      - "3001:80"
+    depends_on:
+      - backend
+      - mcp-agents
+    networks:
+      - mortgage_network
+
+  # Nginx Reverse Proxy
+  nginx:
+    image: nginx:alpine
+    container_name: mortgage_nginx
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - static_volume:/app/staticfiles:ro
+      - media_volume:/app/media:ro
+    ports:
+      - "3060:80"
+    depends_on:
+      - backend
+      - frontend
+      - mcp-agents
+    networks:
+      - mortgage_network
+
+volumes:
+  postgres_data:
+  redis_data:
+  chroma_data:
+  static_volume:
+  media_volume:
+
+networks:
+  mortgage_network:
+    driver: bridge
