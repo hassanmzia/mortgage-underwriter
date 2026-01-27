@@ -126,10 +126,10 @@ docker-compose exec backend python manage.py loaddata sample_policies
 
 ### 4. Access the Application
 
-- **Frontend**: http://localhost
-- **Django Admin**: http://localhost/admin
-- **API Documentation**: http://localhost/api/docs/
-- **MCP Agent API**: http://localhost/mcp-api/
+- **Frontend**: http://localhost:3060
+- **Django Admin**: http://localhost:3060/admin
+- **API Documentation**: http://localhost:3060/api/docs/
+- **MCP Agent API**: http://localhost:3060/mcp-api/
 
 ## Project Structure
 

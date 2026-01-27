@@ -166,8 +166,8 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
       args:
-        - REACT_APP_API_URL=http://localhost:8001/api
-        - REACT_APP_WS_URL=ws://localhost:3000
+        - REACT_APP_API_URL=http://localhost:3060/api
+        - REACT_APP_WS_URL=ws://localhost:3060/ws
     container_name: mortgage_frontend
     ports:
       - "3001:80"
@@ -186,8 +186,7 @@ services:
       - static_volume:/app/staticfiles:ro
       - media_volume:/app/media:ro
     ports:
-      - "80:80"
-      - "443:443"
+      - "3060:80"
     depends_on:
       - backend
       - frontend
