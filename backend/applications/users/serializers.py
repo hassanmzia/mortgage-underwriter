@@ -8,6 +8,7 @@ from .models import User, UserActivity
 class UserSerializer(serializers.ModelSerializer):
     """Serializer for User model"""
     full_name = serializers.SerializerMethodField()
+    profile_picture_url = serializers.SerializerMethodField()
 
     class Meta:
         model = User
@@ -15,12 +16,21 @@ class UserSerializer(serializers.ModelSerializer):
             'id', 'username', 'email', 'first_name', 'last_name', 'full_name',
             'role', 'department', 'employee_id', 'phone', 'nmls_id',
             'max_loan_amount', 'is_available', 'last_activity',
-            'created_at', 'updated_at'
+            'profile_picture', 'profile_picture_url', 'mfa_enabled',
+            'notification_preferences', 'created_at', 'updated_at'
         ]
-        read_only_fields = ['id', 'created_at', 'updated_at', 'last_activity']
+        read_only_fields = ['id', 'created_at', 'updated_at', 'last_activity', 'profile_picture_url']
 
     def get_full_name(self, obj):
         return obj.get_full_name()
+
+    def get_profile_picture_url(self, obj):
+        if obj.profile_picture:
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(obj.profile_picture.url)
+            return obj.profile_picture.url
+        return None
 
 
 class UserCreateSerializer(serializers.ModelSerializer):
