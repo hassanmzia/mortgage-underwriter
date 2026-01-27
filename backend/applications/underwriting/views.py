@@ -1,6 +1,7 @@
 """
 Underwriting Views
 """
+import logging
 from django.db.models import Avg, Count, Q
 from django.utils import timezone
 from rest_framework import viewsets, status, permissions
@@ -18,6 +19,8 @@ from .serializers import (
     WorkflowStatusUpdateSerializer, HumanReviewSerializer,
     WorkflowMetricsSerializer
 )
+
+logger = logging.getLogger(__name__)
 
 
 class UnderwritingWorkflowViewSet(viewsets.ModelViewSet):
@@ -42,6 +45,48 @@ class UnderwritingWorkflowViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(status=status_filter)
 
         return queryset
+
+    @action(detail=True, methods=['post'], permission_classes=[permissions.AllowAny],
+            authentication_classes=[])
+    def callback(self, request, pk=None):
+        """Handle callbacks from MCP agent service (internal API)"""
+        workflow = self.get_object()
+        event_type = request.data.get('event_type')
+        data = request.data.get('data', {})
+
+        logger.info(f"Callback received for workflow {workflow.id}: {event_type}")
+
+        if event_type == 'workflow_started':
+            workflow.status = data.get('status', 'initializing')
+            workflow.save()
+
+        elif event_type == 'agent_analysis':
+            from .tasks import save_agent_analysis
+            save_agent_analysis.delay(str(workflow.id), data)
+
+        elif event_type == 'decision_made':
+            from .tasks import save_underwriting_decision
+            save_underwriting_decision.delay(str(workflow.id), data)
+
+        elif event_type == 'workflow_failed':
+            workflow.status = UnderwritingWorkflow.WorkflowStatus.FAILED
+            workflow.error_message = data.get('error', 'Unknown error')
+            workflow.completed_at = timezone.now()
+            workflow.save()
+
+            # Update application status back to submitted
+            application = workflow.application
+            application.status = 'submitted'
+            application.save()
+
+            AuditTrail.objects.create(
+                workflow=workflow,
+                event_type=AuditTrail.EventType.ERROR,
+                description=f"Workflow failed: {workflow.error_message}",
+                details=data
+            )
+
+        return Response({'status': 'ok'})
 
     @action(detail=True, methods=['post'])
     def start(self, request, pk=None):
