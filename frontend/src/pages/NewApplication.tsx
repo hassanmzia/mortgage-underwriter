@@ -134,10 +134,13 @@ export default function NewApplication() {
         },
       });
 
+      // Submit the application for underwriting
+      await applicationsAPI.submit(application.id);
+
       return application;
     },
     onSuccess: (data) => {
-      toast.success('Application created successfully!');
+      toast.success('Application submitted for underwriting!');
       navigate(`/applications/${data.id}`);
     },
     onError: (error: any) => {
