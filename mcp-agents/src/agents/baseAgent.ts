@@ -54,7 +54,8 @@ export abstract class BaseAgent {
 
     this.openai = new OpenAI({
       apiKey: config.openaiApiKey,
-      baseURL: config.openaiApiBase
+      baseURL: config.openaiApiBase,
+      timeout: config.agentTimeout
     });
   }
 
