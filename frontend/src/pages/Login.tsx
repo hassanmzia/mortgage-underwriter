@@ -33,12 +33,13 @@ export default function Login() {
     try {
       const tokenResponse = await authAPI.login(data.username, data.password);
       const token = tokenResponse.access;
+      const refreshToken = tokenResponse.refresh;
 
       // Temporarily set token to get user data
-      useAuthStore.setState({ token });
+      useAuthStore.setState({ token, refreshToken });
 
       const user = await authAPI.getMe();
-      login(user, token);
+      login(user, token, refreshToken);
 
       toast.success('Welcome back!');
       navigate('/');
