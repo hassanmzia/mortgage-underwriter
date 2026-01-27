@@ -2,12 +2,26 @@ import { useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-hot-toast';
-import { applicationsAPI } from '../services/api';
+import { applicationsAPI, underwritingAPI } from '../services/api';
 import { useAuthStore } from '../store/authStore';
 import clsx from 'clsx';
+import {
+  CheckCircleIcon,
+  ClockIcon,
+  ExclamationTriangleIcon,
+} from '@heroicons/react/24/outline';
 
 const reviewRoles = ['admin', 'senior_underwriter', 'reviewer'];
 const activeStatuses = ['submitted', 'in_review', 'processing', 'underwriting'];
+
+const agentStages = [
+  { key: 'credit', name: 'Credit Analyst', icon: '💳' },
+  { key: 'income', name: 'Income Analyst', icon: '💵' },
+  { key: 'asset', name: 'Asset Analyst', icon: '💰' },
+  { key: 'collateral', name: 'Collateral Analyst', icon: '🏠' },
+  { key: 'critic', name: 'Critic Agent', icon: '🔎' },
+  { key: 'decision', name: 'Decision Agent', icon: '⚖️' },
+];
 
 export default function ApplicationDetail() {
   const { id } = useParams<{ id: string }>();
@@ -17,6 +31,7 @@ export default function ApplicationDetail() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [reviewDecision, setReviewDecision] = useState('');
   const [reviewComments, setReviewComments] = useState('');
+  const [expandedAgent, setExpandedAgent] = useState<string | null>(null);
 
   const canReview = user && reviewRoles.includes(user.role);
 
@@ -24,6 +39,21 @@ export default function ApplicationDetail() {
     queryKey: ['application', id],
     queryFn: () => applicationsAPI.get(id!),
     enabled: !!id,
+  });
+
+  const workflowId = application?.underwriting_workflow?.id;
+
+  const { data: workflow } = useQuery({
+    queryKey: ['workflow', workflowId],
+    queryFn: () => underwritingAPI.getWorkflow(workflowId!),
+    enabled: !!workflowId,
+    refetchInterval: (query) => {
+      const data = query.state.data;
+      if (!data) return false;
+      return data.status === 'completed' || data.status === 'failed' || data.status === 'human_review'
+        ? false
+        : 5000;
+    },
   });
 
   const submitMutation = useMutation({
@@ -85,6 +115,13 @@ export default function ApplicationDetail() {
 
   const borrower = application.borrowers?.[0];
   const property = application.property;
+  const analyses = workflow?.analyses || [];
+  const decision = workflow?.decision;
+  const isProcessing = activeStatuses.includes(application.status) && !decision;
+
+  const getAgentAnalysis = (agentType: string) => {
+    return analyses.find((a: any) => a.agent_type === agentType);
+  };
 
   return (
     <div className="space-y-6">
@@ -166,6 +203,25 @@ export default function ApplicationDetail() {
                 Requires Human Review
               </span>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* AI Processing Status - shown while workflow is active */}
+      {isProcessing && application.underwriting_workflow && (
+        <div className="card border border-blue-200 bg-blue-50">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="animate-spin h-5 w-5 border-2 border-blue-500 border-t-transparent rounded-full" />
+            <h2 className="text-lg font-semibold text-gray-900">AI Agents Processing</h2>
+            <span className="text-sm text-blue-600 font-medium">
+              {application.underwriting_workflow.progress_percent || 0}% complete
+            </span>
+          </div>
+          <div className="w-full bg-blue-200 rounded-full h-2">
+            <div
+              className="bg-blue-600 h-2 rounded-full transition-all duration-500"
+              style={{ width: `${application.underwriting_workflow.progress_percent || 0}%` }}
+            />
           </div>
         </div>
       )}
@@ -279,34 +335,160 @@ export default function ApplicationDetail() {
         </div>
       </div>
 
-      {/* Underwriting Link */}
-      {application.underwriting_workflow && (
+      {/* AI Agent Analyses */}
+      {analyses.length > 0 && (
         <div className="card">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-lg font-semibold text-gray-900">Underwriting Workflow</h2>
-              <p className="text-gray-600 mt-1">
-                Status: <span className="capitalize">{application.underwriting_workflow.status?.replace('_', ' ')}</span>
-              </p>
-            </div>
-            <Link
-              to={`/underwriting/${application.underwriting_workflow.id}`}
-              className="btn-secondary"
-            >
-              View Workflow Details
-            </Link>
+          <h2 className="text-lg font-semibold text-gray-900 mb-6">AI Agent Analyses</h2>
+          <div className="space-y-3">
+            {agentStages.map((stage) => {
+              const analysis = getAgentAnalysis(stage.key);
+
+              return (
+                <div key={stage.key}>
+                  <div
+                    className={clsx(
+                      'flex items-center gap-4 p-4 rounded-lg cursor-pointer transition-all',
+                      analysis ? 'bg-green-50 border border-green-200' : 'bg-gray-50 border border-gray-200'
+                    )}
+                    onClick={() => analysis && setExpandedAgent(expandedAgent === stage.key ? null : stage.key)}
+                  >
+                    <div className="text-2xl">{stage.icon}</div>
+                    <div className="flex-1">
+                      <h3 className="font-medium text-gray-900">{stage.name}</h3>
+                      <p className="text-sm text-gray-500">
+                        {analysis
+                          ? `${analysis.recommendation || 'Analysis complete'} — Confidence: ${
+                              analysis.confidence_score ? `${(analysis.confidence_score * 100).toFixed(0)}%` : 'N/A'
+                            }`
+                          : 'Pending'}
+                      </p>
+                    </div>
+                    <div>
+                      {analysis ? (
+                        <CheckCircleIcon className="h-6 w-6 text-green-500" />
+                      ) : (
+                        <ClockIcon className="h-6 w-6 text-gray-400" />
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Expanded Analysis */}
+                  {expandedAgent === stage.key && analysis && (
+                    <div className="mt-2 ml-12 p-4 bg-white border rounded-lg space-y-4">
+                      <pre className="text-sm text-gray-700 whitespace-pre-wrap">
+                        {analysis.analysis_text}
+                      </pre>
+                      {analysis.risk_factors?.length > 0 && (
+                        <div className="border-t pt-3">
+                          <h4 className="font-medium text-gray-900 mb-2">Risk Factors</h4>
+                          <ul className="space-y-1">
+                            {analysis.risk_factors.map((rf: any, i: number) => (
+                              <li key={i} className="flex items-start gap-2 text-sm">
+                                <ExclamationTriangleIcon className={clsx(
+                                  'h-4 w-4 mt-0.5 flex-shrink-0',
+                                  rf.severity === 'critical' || rf.severity === 'high'
+                                    ? 'text-red-500'
+                                    : 'text-yellow-500'
+                                )} />
+                                <span className="text-gray-600">{rf.description || rf}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                      {analysis.conditions?.length > 0 && (
+                        <div className="border-t pt-3">
+                          <h4 className="font-medium text-gray-900 mb-2">Conditions</h4>
+                          <ul className="space-y-1">
+                            {analysis.conditions.map((c: any, i: number) => (
+                              <li key={i} className="text-sm text-gray-600">• {c}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
+        </div>
+      )}
+
+      {/* AI Decision Memo */}
+      {decision && (
+        <div className="card">
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">AI Decision Details</h2>
+          <div className={clsx(
+            'p-4 rounded-lg border-l-4 mb-4',
+            decision.ai_decision === 'approved' ? 'bg-green-50 border-green-500' :
+            decision.ai_decision === 'denied' ? 'bg-red-50 border-red-500' :
+            'bg-yellow-50 border-yellow-500'
+          )}>
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <p className="text-xl font-bold capitalize">
+                  {decision.ai_decision?.replace('_', ' ')}
+                </p>
+                <p className="text-gray-600 text-sm">
+                  Risk Score: {decision.ai_risk_score}/100 | Confidence: {
+                    decision.ai_confidence
+                      ? `${(decision.ai_confidence * 100).toFixed(0)}%`
+                      : 'N/A'
+                  }
+                </p>
+              </div>
+            </div>
+            {decision.decision_memo && (
+              <div>
+                <h4 className="font-medium text-gray-900 mb-2">Decision Memo</h4>
+                <pre className="text-sm text-gray-700 whitespace-pre-wrap bg-white p-3 rounded border">
+                  {decision.decision_memo}
+                </pre>
+              </div>
+            )}
+          </div>
+
+          {/* Risk Factors from workflow */}
+          {workflow?.risk_factors?.length > 0 && (
+            <div>
+              <h3 className="font-medium text-gray-900 mb-3">Identified Risk Factors</h3>
+              <div className="space-y-2">
+                {workflow.risk_factors.map((rf: any) => (
+                  <div key={rf.id} className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg">
+                    <span className={clsx(
+                      'px-2 py-0.5 rounded text-xs font-medium flex-shrink-0 mt-0.5',
+                      rf.severity === 'critical' ? 'bg-red-100 text-red-700' :
+                      rf.severity === 'high' ? 'bg-orange-100 text-orange-700' :
+                      rf.severity === 'medium' ? 'bg-yellow-100 text-yellow-700' :
+                      'bg-gray-100 text-gray-700'
+                    )}>
+                      {rf.severity}
+                    </span>
+                    <div>
+                      <p className="text-sm text-gray-900">{rf.description}</p>
+                      {rf.mitigation && (
+                        <p className="text-xs text-gray-500 mt-1">Mitigation: {rf.mitigation}</p>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
       {/* Review & Decision Section for Senior Underwriters */}
       {canReview && activeStatuses.includes(application.status) && !application.human_review_completed && (
         <div id="review-section" className="card border-2 border-primary-300">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">
+          <h2 className="text-lg font-semibold text-gray-900 mb-2">
             Review & Decision
           </h2>
           <p className="text-gray-600 mb-4">
-            As a {user?.role?.replace('_', ' ')}, you can make a decision on this application.
+            {decision
+              ? 'Review the AI analysis above and make your final decision.'
+              : 'AI analysis is still processing. You can make a manual decision now or wait for the AI assessment.'}
           </p>
 
           <div className="space-y-4">

@@ -154,11 +154,28 @@ class LoanApplicationDetailSerializer(serializers.ModelSerializer):
     )
     ltv_ratio = serializers.ReadOnlyField()
     purchase_price = serializers.ReadOnlyField()
+    underwriting_workflow = serializers.SerializerMethodField()
 
     class Meta:
         model = LoanApplication
         fields = '__all__'
         read_only_fields = ['id', 'case_id', 'created_at', 'updated_at']
+
+    def get_underwriting_workflow(self, obj):
+        try:
+            workflow = obj.underwriting_workflow
+        except Exception:
+            return None
+        if not workflow:
+            return None
+        return {
+            'id': str(workflow.id),
+            'status': workflow.status,
+            'progress_percent': workflow.progress_percent,
+            'current_agent': workflow.current_agent,
+            'started_at': workflow.started_at,
+            'completed_at': workflow.completed_at,
+        }
 
 
 class LoanApplicationCreateSerializer(serializers.ModelSerializer):
