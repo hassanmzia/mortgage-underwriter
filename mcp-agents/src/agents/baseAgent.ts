@@ -192,6 +192,6 @@ export abstract class BaseAgent {
     }
 
     const validated = tool.inputSchema.parse(input);
-    return tool.handler(validated);
+    return tool.handler(validated as any);
   }
 }
