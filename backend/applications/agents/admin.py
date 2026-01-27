@@ -14,9 +14,9 @@ class AgentConfigurationAdmin(admin.ModelAdmin):
 
 @admin.register(AgentMetrics)
 class AgentMetricsAdmin(admin.ModelAdmin):
-    list_display = ['agent', 'date', 'total_analyses', 'successful_analyses', 'avg_processing_time']
-    list_filter = ['agent', 'date']
-    ordering = ['-date']
+    list_display = ['agent_config', 'period_start', 'period_end', 'total_executions', 'successful_executions']
+    list_filter = ['agent_config', 'period_start']
+    ordering = ['-period_end']
 
 
 @admin.register(PolicyDocument)
@@ -28,7 +28,7 @@ class PolicyDocumentAdmin(admin.ModelAdmin):
 
 @admin.register(ToolExecution)
 class ToolExecutionAdmin(admin.ModelAdmin):
-    list_display = ['tool_name', 'agent', 'workflow', 'success', 'execution_time_ms', 'executed_at']
-    list_filter = ['tool_name', 'success', 'executed_at']
-    readonly_fields = ['executed_at']
-    ordering = ['-executed_at']
+    list_display = ['tool_name', 'agent_type', 'workflow_id', 'success', 'execution_time_ms', 'timestamp']
+    list_filter = ['tool_name', 'success', 'timestamp']
+    readonly_fields = ['timestamp']
+    ordering = ['-timestamp']
