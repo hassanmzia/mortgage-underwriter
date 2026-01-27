@@ -126,7 +126,7 @@ export class MCPServer {
         const calcTool = calculatorTools.find(t => t.name === name);
         if (calcTool) {
           const validated = calcTool.inputSchema.parse(args);
-          result = calcTool.handler(validated);
+          result = calcTool.handler(validated as any);
         } else {
           throw new Error(`No handler for tool: ${name}`);
         }
