@@ -1,14 +1,12 @@
 import { useParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { underwritingAPI } from '../services/api';
 import { toast } from 'react-hot-toast';
 import clsx from 'clsx';
 import {
   CheckCircleIcon,
   ClockIcon,
-  XCircleIcon,
-  CpuChipIcon,
 } from '@heroicons/react/24/outline';
 
 const agentStages = [
@@ -31,8 +29,10 @@ export default function UnderwritingWorkflow() {
     queryKey: ['workflow', workflowId],
     queryFn: () => underwritingAPI.getWorkflow(workflowId!),
     enabled: !!workflowId,
-    refetchInterval: (data) =>
-      data?.status === 'completed' || data?.status === 'failed' ? false : 3000,
+    refetchInterval: (query) => {
+      const data = query.state.data;
+      return data?.status === 'completed' || data?.status === 'failed' ? false : 3000;
+    },
   });
 
   const humanReviewMutation = useMutation({
@@ -131,7 +131,7 @@ export default function UnderwritingWorkflow() {
       <div className="card">
         <h2 className="text-lg font-semibold text-gray-900 mb-6">Agent Pipeline</h2>
         <div className="space-y-4">
-          {agentStages.map((stage, index) => {
+          {agentStages.map((stage) => {
             const status = getStageStatus(stage.key);
             const analysis = getAgentAnalysis(stage.key.replace('_analysis', '_analyst').replace('_review', ''));
 
