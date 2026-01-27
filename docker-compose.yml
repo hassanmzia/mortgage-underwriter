@@ -62,6 +62,7 @@ services:
     environment:
       - DEBUG=False
       - SECRET_KEY=${DJANGO_SECRET_KEY:-your-super-secret-key-change-in-production}
+      - ALLOWED_HOSTS=*
       - DATABASE_URL=postgres://mortgage_user:mortgage_secure_password@postgres:5432/mortgage_underwriter
       - REDIS_URL=redis://redis:6379/0
       - CHROMADB_HOST=chromadb
