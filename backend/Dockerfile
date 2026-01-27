@@ -21,12 +21,12 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy project
 COPY . .
 
-# Create non-root user
-RUN adduser --disabled-password --gecos '' appuser && chown -R appuser /app
-USER appuser
+# Make entrypoint executable and create directories
+RUN chmod +x /app/entrypoint.sh && \
+    mkdir -p /app/staticfiles /app/media
 
 # Expose port
 EXPOSE 8000
 
-# Default command
-CMD ["gunicorn", "config.wsgi:application", "--bind", "0.0.0.0:8000"]
+# Use entrypoint script
+ENTRYPOINT ["/app/entrypoint.sh"]

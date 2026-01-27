@@ -5,6 +5,7 @@ services:
   postgres:
     image: postgres:15-alpine
     container_name: mortgage_postgres
+    restart: unless-stopped
     environment:
       POSTGRES_DB: mortgage_underwriter
       POSTGRES_USER: mortgage_user
@@ -26,6 +27,7 @@ services:
   redis:
     image: redis:7-alpine
     container_name: mortgage_redis
+    restart: unless-stopped
     ports:
       - "6380:6379"
     volumes:
@@ -42,6 +44,7 @@ services:
   chromadb:
     image: chromadb/chroma:latest
     container_name: mortgage_chromadb
+    restart: unless-stopped
     environment:
       - IS_PERSISTENT=TRUE
       - PERSIST_DIRECTORY=/chroma/chroma
@@ -85,17 +88,13 @@ services:
         condition: service_started
     networks:
       - mortgage_network
+    restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health/"]
       interval: 30s
       timeout: 10s
       retries: 5
       start_period: 60s
-    command: >
-      sh -c "python manage.py makemigrations users applications underwriting agents compliance --noinput &&
-             python manage.py migrate &&
-             python manage.py collectstatic --noinput &&
-             gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 4"
 
   # Celery Worker for Background Tasks
   celery:
@@ -103,6 +102,8 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     container_name: mortgage_celery
+    entrypoint: []
+    command: ["celery", "-A", "config", "worker", "-l", "info", "-c", "4"]
     environment:
       - DEBUG=False
       - SECRET_KEY=${DJANGO_SECRET_KEY:-your-super-secret-key-change-in-production}
@@ -122,7 +123,7 @@ services:
         condition: service_healthy
     networks:
       - mortgage_network
-    command: celery -A config worker -l info -c 4
+    restart: unless-stopped
 
   # Celery Beat Scheduler
   celery-beat:
@@ -130,6 +131,8 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     container_name: mortgage_celery_beat
+    entrypoint: []
+    command: ["celery", "-A", "config", "beat", "-l", "info"]
     environment:
       - DEBUG=False
       - SECRET_KEY=${DJANGO_SECRET_KEY:-your-super-secret-key-change-in-production}
@@ -144,7 +147,7 @@ services:
         condition: service_healthy
     networks:
       - mortgage_network
-    command: celery -A config beat -l info
+    restart: unless-stopped
 
   # Node.js MCP Agent Service
   mcp-agents:
@@ -174,6 +177,7 @@ services:
       start_period: 30s
     networks:
       - mortgage_network
+    restart: unless-stopped
 
   # React Frontend
   frontend:
@@ -191,6 +195,7 @@ services:
       - mcp-agents
     networks:
       - mortgage_network
+    restart: unless-stopped
 
   # Nginx Reverse Proxy
   nginx:
