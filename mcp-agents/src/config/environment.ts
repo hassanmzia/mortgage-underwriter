@@ -26,7 +26,7 @@ export const config = {
   chromaPort: parseInt(process.env.CHROMADB_PORT || '8000', 10),
 
   // Django Backend
-  djangoApiUrl: process.env.DJANGO_API_URL || 'http://localhost:8001',
+  djangoApiUrl: process.env.DJANGO_API_URL || 'http://localhost:8000',
 
   // OpenAI
   openaiApiKey: process.env.OPENAI_API_KEY || '',
