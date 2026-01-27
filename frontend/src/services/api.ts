@@ -34,7 +34,7 @@ api.interceptors.response.use(
 // Auth API
 export const authAPI = {
   login: async (username: string, password: string) => {
-    const response = await axios.post(`${API_URL}/../auth/token/`, {
+    const response = await axios.post('/api/auth/token/', {
       username,
       password,
     });
@@ -48,12 +48,12 @@ export const authAPI = {
     first_name: string;
     last_name: string;
   }) => {
-    const response = await axios.post(`${API_URL}/users/register/`, data);
+    const response = await axios.post('/api/v1/users/register/', data);
     return response.data;
   },
 
   refreshToken: async (refresh: string) => {
-    const response = await axios.post(`${API_URL}/../auth/token/refresh/`, {
+    const response = await axios.post('/api/auth/token/refresh/', {
       refresh,
     });
     return response.data;
