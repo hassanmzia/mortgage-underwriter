@@ -1,9 +1,9 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useAuthStore } from '../store/authStore';
 import { useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { toast } from 'react-hot-toast';
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import clsx from 'clsx';
 import axios from 'axios';
 import {
@@ -29,13 +29,30 @@ interface PasswordForm {
   confirm_password: string;
 }
 
+interface NotificationPreferences {
+  new_application: boolean;
+  workflow_complete: boolean;
+  review_required: boolean;
+  bias_flag: boolean;
+  daily_summary: boolean;
+}
+
 export default function Settings() {
-  const { user, logout, token } = useAuthStore();
+  const { user, logout, token, setUser } = useAuthStore();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('profile');
-  const [profileImage, setProfileImage] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [mfaEnabled, setMfaEnabled] = useState(false);
+  const [mfaQrCode, setMfaQrCode] = useState<string | null>(null);
+  const [mfaSecret, setMfaSecret] = useState<string | null>(null);
+  const [verificationCode, setVerificationCode] = useState('');
+
+  const [notifications, setNotifications] = useState<NotificationPreferences>({
+    new_application: true,
+    workflow_complete: true,
+    review_required: true,
+    bias_flag: true,
+    daily_summary: false,
+  });
 
   const profileForm = useForm<ProfileForm>({
     defaultValues: {
@@ -49,12 +66,35 @@ export default function Settings() {
 
   const passwordForm = useForm<PasswordForm>();
 
+  // Load notification preferences from user
+  useEffect(() => {
+    if (user?.notification_preferences) {
+      setNotifications({
+        ...notifications,
+        ...user.notification_preferences,
+      });
+    }
+  }, [user]);
+
   const tabs = [
     { id: 'profile', name: 'Profile', icon: UserCircleIcon },
     { id: 'security', name: 'Security', icon: KeyIcon },
     { id: 'notifications', name: 'Notifications', icon: BellIcon },
     { id: 'mfa', name: 'Two-Factor Auth', icon: ShieldCheckIcon },
   ];
+
+  // Fetch current user data
+  const { refetch: refetchUser } = useQuery({
+    queryKey: ['currentUser'],
+    queryFn: async () => {
+      const response = await axios.get('/api/v1/users/me/', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setUser(response.data);
+      return response.data;
+    },
+    enabled: !!token,
+  });
 
   const updateProfileMutation = useMutation({
     mutationFn: async (data: ProfileForm) => {
@@ -63,11 +103,33 @@ export default function Settings() {
       });
       return response.data;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      setUser(data);
       toast.success('Profile updated successfully');
     },
     onError: () => {
       toast.error('Failed to update profile');
+    },
+  });
+
+  const uploadPictureMutation = useMutation({
+    mutationFn: async (file: File) => {
+      const formData = new FormData();
+      formData.append('profile_picture', file);
+      const response = await axios.post('/api/v1/users/upload_profile_picture/', formData, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+      return response.data;
+    },
+    onSuccess: (data) => {
+      setUser(data);
+      toast.success('Profile picture updated');
+    },
+    onError: () => {
+      toast.error('Failed to upload profile picture');
     },
   });
 
@@ -87,6 +149,74 @@ export default function Settings() {
     },
     onError: () => {
       toast.error('Failed to change password. Check your current password.');
+    },
+  });
+
+  const setupMfaMutation = useMutation({
+    mutationFn: async () => {
+      const response = await axios.post('/api/v1/users/setup_mfa/', {}, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      return response.data;
+    },
+    onSuccess: (data) => {
+      setMfaQrCode(data.qr_code);
+      setMfaSecret(data.secret);
+    },
+    onError: () => {
+      toast.error('Failed to setup MFA');
+    },
+  });
+
+  const verifyMfaMutation = useMutation({
+    mutationFn: async (code: string) => {
+      const response = await axios.post('/api/v1/users/verify_mfa/', { code }, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      return response.data;
+    },
+    onSuccess: () => {
+      toast.success('Two-factor authentication enabled');
+      setMfaQrCode(null);
+      setMfaSecret(null);
+      setVerificationCode('');
+      refetchUser();
+    },
+    onError: () => {
+      toast.error('Invalid verification code');
+    },
+  });
+
+  const disableMfaMutation = useMutation({
+    mutationFn: async (password: string) => {
+      const response = await axios.post('/api/v1/users/disable_mfa/', { password }, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      return response.data;
+    },
+    onSuccess: () => {
+      toast.success('Two-factor authentication disabled');
+      refetchUser();
+    },
+    onError: () => {
+      toast.error('Invalid password');
+    },
+  });
+
+  const saveNotificationsMutation = useMutation({
+    mutationFn: async (preferences: NotificationPreferences) => {
+      const response = await axios.post('/api/v1/users/save_notification_preferences/',
+        { preferences },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      return response.data;
+    },
+    onSuccess: () => {
+      toast.success('Notification preferences saved');
+      refetchUser();
+    },
+    onError: () => {
+      toast.error('Failed to save preferences');
     },
   });
 
@@ -113,12 +243,7 @@ export default function Settings() {
         toast.error('Image must be less than 5MB');
         return;
       }
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setProfileImage(reader.result as string);
-        toast.success('Profile picture updated');
-      };
-      reader.readAsDataURL(file);
+      uploadPictureMutation.mutate(file);
     }
   };
 
@@ -126,6 +251,13 @@ export default function Settings() {
     logout();
     navigate('/login');
     toast.success('Logged out successfully');
+  };
+
+  const handleDisableMfa = () => {
+    const password = prompt('Enter your password to disable MFA:');
+    if (password) {
+      disableMfaMutation.mutate(password);
+    }
   };
 
   return (
@@ -248,9 +380,9 @@ export default function Settings() {
               </h2>
               <div className="flex flex-col items-center">
                 <div className="relative">
-                  {profileImage ? (
+                  {user?.profile_picture_url ? (
                     <img
-                      src={profileImage}
+                      src={user.profile_picture_url}
                       alt="Profile"
                       className="w-32 h-32 rounded-full object-cover border-4 border-white shadow-lg"
                     />
@@ -261,6 +393,7 @@ export default function Settings() {
                   )}
                   <button
                     onClick={() => fileInputRef.current?.click()}
+                    disabled={uploadPictureMutation.isPending}
                     className="absolute bottom-0 right-0 p-2 bg-white rounded-full shadow-lg hover:bg-gray-50 transition-colors"
                   >
                     <CameraIcon className="h-5 w-5 text-gray-600" />
@@ -274,7 +407,8 @@ export default function Settings() {
                   />
                 </div>
                 <p className="text-sm text-gray-500 mt-4 text-center">
-                  Click the camera icon to upload a new photo.<br />
+                  {uploadPictureMutation.isPending ? 'Uploading...' : 'Click the camera icon to upload a new photo.'}
+                  <br />
                   Max size: 5MB
                 </p>
               </div>
@@ -306,8 +440,8 @@ export default function Settings() {
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-gray-600">2FA</span>
-                  <span className={mfaEnabled ? 'text-green-600' : 'text-gray-500'}>
-                    {mfaEnabled ? 'Enabled' : 'Disabled'}
+                  <span className={user?.mfa_enabled ? 'text-green-600' : 'text-gray-500'}>
+                    {user?.mfa_enabled ? 'Enabled' : 'Disabled'}
                   </span>
                 </div>
               </div>
@@ -409,17 +543,26 @@ export default function Settings() {
                   <p className="text-sm text-gray-500">{item.description}</p>
                 </div>
                 <label className="relative inline-flex items-center cursor-pointer">
-                  <input type="checkbox" defaultChecked className="sr-only peer" />
+                  <input
+                    type="checkbox"
+                    checked={notifications[item.id as keyof NotificationPreferences]}
+                    onChange={(e) => setNotifications({
+                      ...notifications,
+                      [item.id]: e.target.checked,
+                    })}
+                    className="sr-only peer"
+                  />
                   <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600"></div>
                 </label>
               </div>
             ))}
           </div>
           <button
-            onClick={() => toast.success('Notification preferences saved')}
+            onClick={() => saveNotificationsMutation.mutate(notifications)}
+            disabled={saveNotificationsMutation.isPending}
             className="btn-primary mt-6"
           >
-            Save Preferences
+            {saveNotificationsMutation.isPending ? 'Saving...' : 'Save Preferences'}
           </button>
         </div>
       )}
@@ -431,7 +574,7 @@ export default function Settings() {
             Two-Factor Authentication
           </h2>
 
-          {!mfaEnabled ? (
+          {!user?.mfa_enabled && !mfaQrCode ? (
             <div className="text-center py-8">
               <ShieldCheckIcon className="h-16 w-16 text-gray-300 mx-auto mb-4" />
               <h3 className="text-lg font-medium text-gray-900 mb-2">
@@ -441,14 +584,64 @@ export default function Settings() {
                 Add an extra layer of security to your account by enabling two-factor authentication.
               </p>
               <button
-                onClick={() => {
-                  setMfaEnabled(true);
-                  toast.success('Two-factor authentication enabled');
-                }}
+                onClick={() => setupMfaMutation.mutate()}
+                disabled={setupMfaMutation.isPending}
                 className="btn-primary"
               >
-                Enable Two-Factor Auth
+                {setupMfaMutation.isPending ? 'Setting up...' : 'Enable Two-Factor Auth'}
               </button>
+            </div>
+          ) : mfaQrCode ? (
+            <div className="space-y-6">
+              <div className="text-center">
+                <h3 className="text-lg font-medium text-gray-900 mb-4">
+                  Scan this QR code with your authenticator app
+                </h3>
+                <div className="inline-block p-4 bg-white border rounded-lg shadow-sm">
+                  <img src={mfaQrCode} alt="MFA QR Code" className="w-48 h-48" />
+                </div>
+              </div>
+
+              <div className="p-4 bg-gray-50 rounded-lg">
+                <p className="text-sm font-medium text-gray-700 mb-2">
+                  Or enter this code manually:
+                </p>
+                <code className="block p-2 bg-white border rounded text-center font-mono text-lg tracking-wider">
+                  {mfaSecret}
+                </code>
+              </div>
+
+              <div>
+                <label className="label">Enter verification code from your app</label>
+                <input
+                  type="text"
+                  value={verificationCode}
+                  onChange={(e) => setVerificationCode(e.target.value)}
+                  placeholder="000000"
+                  maxLength={6}
+                  className="input text-center text-2xl tracking-widest"
+                />
+              </div>
+
+              <div className="flex gap-4">
+                <button
+                  onClick={() => {
+                    setMfaQrCode(null);
+                    setMfaSecret(null);
+                    setVerificationCode('');
+                  }}
+                  className="btn-secondary flex-1"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => verifyMfaMutation.mutate(verificationCode)}
+                  disabled={verificationCode.length !== 6 || verifyMfaMutation.isPending}
+                  className="btn-primary flex-1"
+                >
+                  {verifyMfaMutation.isPending ? 'Verifying...' : 'Verify & Enable'}
+                </button>
+              </div>
             </div>
           ) : (
             <div>
@@ -471,13 +664,11 @@ export default function Settings() {
                 </div>
 
                 <button
-                  onClick={() => {
-                    setMfaEnabled(false);
-                    toast.success('Two-factor authentication disabled');
-                  }}
+                  onClick={handleDisableMfa}
+                  disabled={disableMfaMutation.isPending}
                   className="text-red-600 hover:text-red-700 font-medium"
                 >
-                  Disable Two-Factor Auth
+                  {disableMfaMutation.isPending ? 'Disabling...' : 'Disable Two-Factor Auth'}
                 </button>
               </div>
             </div>

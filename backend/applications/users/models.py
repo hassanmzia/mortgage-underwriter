@@ -29,6 +29,11 @@ class User(AbstractUser):
     department = models.CharField(max_length=100, blank=True)
     employee_id = models.CharField(max_length=50, blank=True, unique=True, null=True)
     phone = models.CharField(max_length=20, blank=True)
+    profile_picture = models.ImageField(upload_to='profile_pictures/', blank=True, null=True)
+
+    # MFA fields
+    mfa_enabled = models.BooleanField(default=False)
+    mfa_secret = models.CharField(max_length=32, blank=True, null=True)
 
     # NMLS (Nationwide Multistate Licensing System) ID for licensed underwriters
     nmls_id = models.CharField(max_length=20, blank=True, null=True)

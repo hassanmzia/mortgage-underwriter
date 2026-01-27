@@ -224,6 +224,9 @@ export interface User {
   role: UserRole;
   department: string;
   phone?: string;
+  profile_picture_url?: string;
+  mfa_enabled: boolean;
+  notification_preferences?: Record<string, boolean>;
   is_available: boolean;
 }
 
