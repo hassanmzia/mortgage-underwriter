@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { applicationsAPI } from '../services/api';
 import { formatDistanceToNow } from 'date-fns';
 import {
@@ -26,6 +26,7 @@ const statusColors: Record<string, string> = {
 };
 
 export default function Applications() {
+  const navigate = useNavigate();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
 
@@ -49,7 +50,10 @@ export default function Applications() {
             Manage and review mortgage applications
           </p>
         </div>
-        <button className="btn-primary flex items-center gap-2">
+        <button
+          onClick={() => navigate('/applications/new')}
+          className="btn-primary flex items-center gap-2"
+        >
           <PlusIcon className="h-5 w-5" />
           New Application
         </button>
