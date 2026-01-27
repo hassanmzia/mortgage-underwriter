@@ -7,24 +7,24 @@ import { z } from 'zod';
 
 // Tool Schemas
 export const DTIInputSchema = z.object({
-  monthlyDebt: z.number().positive(),
-  monthlyIncome: z.number().positive()
+  monthlyDebt: z.number().nonnegative(),
+  monthlyIncome: z.number().nonnegative()
 });
 
 export const LTVInputSchema = z.object({
-  loanAmount: z.number().positive(),
-  propertyValue: z.number().positive()
+  loanAmount: z.number().nonnegative(),
+  propertyValue: z.number().nonnegative()
 });
 
 export const ReservesInputSchema = z.object({
   liquidAssets: z.number().nonnegative(),
-  monthlyPayment: z.number().positive(),
+  monthlyPayment: z.number().nonnegative(),
   requiredMonths: z.number().int().positive().default(2)
 });
 
 export const HousingRatioInputSchema = z.object({
-  monthlyPayment: z.number().positive(),
-  monthlyIncome: z.number().positive()
+  monthlyPayment: z.number().nonnegative(),
+  monthlyIncome: z.number().nonnegative()
 });
 
 export const CreditScoreInputSchema = z.object({
@@ -33,15 +33,24 @@ export const CreditScoreInputSchema = z.object({
 
 export const LargeDepositsInputSchema = z.object({
   deposits: z.array(z.object({
-    amount: z.number().positive(),
+    amount: z.number().nonnegative(),
     date: z.string()
   })),
-  monthlyIncome: z.number().positive()
+  monthlyIncome: z.number().nonnegative()
 });
 
 // Tool Implementations
 export function calculateDTI(input: z.infer<typeof DTIInputSchema>): string {
   const { monthlyDebt, monthlyIncome } = input;
+  if (monthlyIncome === 0) {
+    return JSON.stringify({
+      dti_ratio: 0,
+      monthly_debt: monthlyDebt,
+      monthly_income: 0,
+      status: 'Unknown - No income reported',
+      formatted: `DTI Ratio: N/A (No income reported) - Debt: $${monthlyDebt.toLocaleString()}`
+    });
+  }
   const dti = (monthlyDebt / monthlyIncome) * 100;
 
   let status: string;
@@ -61,6 +70,16 @@ export function calculateDTI(input: z.infer<typeof DTIInputSchema>): string {
 
 export function calculateLTV(input: z.infer<typeof LTVInputSchema>): string {
   const { loanAmount, propertyValue } = input;
+  if (propertyValue === 0) {
+    return JSON.stringify({
+      ltv_ratio: 0,
+      loan_amount: loanAmount,
+      property_value: 0,
+      status: 'Unknown - No property value',
+      pmi_required: false,
+      formatted: `LTV Ratio: N/A (No property value reported) - Loan: $${loanAmount.toLocaleString()}`
+    });
+  }
   const ltv = (loanAmount / propertyValue) * 100;
 
   let status: string;
@@ -83,6 +102,16 @@ export function calculateLTV(input: z.infer<typeof LTVInputSchema>): string {
 
 export function calculateReserves(input: z.infer<typeof ReservesInputSchema>): string {
   const { liquidAssets, monthlyPayment, requiredMonths } = input;
+  if (monthlyPayment === 0) {
+    return JSON.stringify({
+      months_coverage: 0,
+      liquid_assets: liquidAssets,
+      required_amount: 0,
+      surplus_deficit: liquidAssets,
+      status: 'Unknown - No payment reported',
+      formatted: `Reserves: N/A (No monthly payment reported) - Assets: $${liquidAssets.toLocaleString()}`
+    });
+  }
   const monthsCoverage = liquidAssets / monthlyPayment;
   const requiredAmount = monthlyPayment * requiredMonths;
   const surplus = liquidAssets - requiredAmount;
@@ -101,6 +130,15 @@ export function calculateReserves(input: z.infer<typeof ReservesInputSchema>): s
 
 export function calculateHousingRatio(input: z.infer<typeof HousingRatioInputSchema>): string {
   const { monthlyPayment, monthlyIncome } = input;
+  if (monthlyIncome === 0) {
+    return JSON.stringify({
+      housing_ratio: 0,
+      monthly_payment: monthlyPayment,
+      monthly_income: 0,
+      status: 'Unknown - No income reported',
+      formatted: `Housing Ratio: N/A (No income reported) - Payment: $${monthlyPayment.toLocaleString()}`
+    });
+  }
   const ratio = (monthlyPayment / monthlyIncome) * 100;
 
   let status: string;
@@ -151,6 +189,15 @@ export function checkCreditScorePolicy(input: z.infer<typeof CreditScoreInputSch
 
 export function checkLargeDeposits(input: z.infer<typeof LargeDepositsInputSchema>): string {
   const { deposits, monthlyIncome } = input;
+  if (monthlyIncome === 0) {
+    return JSON.stringify({
+      large_deposits: deposits.map(d => ({ ...d, sourcingRequired: true })),
+      threshold: 0,
+      formatted: deposits.length > 0
+        ? `All ${deposits.length} deposit(s) require sourcing documentation (no income reported for threshold calculation).`
+        : 'No deposits reported and no income available for threshold calculation.'
+    });
+  }
   const threshold = monthlyIncome * 0.25;
 
   const largeDeposits = deposits.filter(d => d.amount >= threshold).map(d => ({
