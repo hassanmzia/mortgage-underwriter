@@ -41,6 +41,17 @@ export const authAPI = {
     return response.data;
   },
 
+  register: async (data: {
+    username: string;
+    email: string;
+    password: string;
+    first_name: string;
+    last_name: string;
+  }) => {
+    const response = await axios.post(`${API_URL}/users/register/`, data);
+    return response.data;
+  },
+
   refreshToken: async (refresh: string) => {
     const response = await axios.post(`${API_URL}/../auth/token/refresh/`, {
       refresh,
